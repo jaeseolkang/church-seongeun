@@ -22,7 +22,7 @@ const USE_FIREBASE = true;
 // Firebase DB 안에서 churches/{CHURCH_ID}/ 경로 아래로 데이터가 분리됨.
 // (영문 소문자/숫자/하이픈만 사용 권장 — Firebase 경로에 안전한 문자)
 // ============================================================
-const CHURCH_ID = 'seongeun-church';
+const CHURCH_ID = 'juwon-church';
 
 
 
@@ -5249,6 +5249,23 @@ function getChosung(str) {
   const c = CHOSUNG_TABLE[Math.floor(code / 588)];
   return CHOSUNG_DOUBLE_MAP[c] || c;
 }
+// 이름 전체 글자의 초성을 이어붙인 문자열 (예: '김철수' -> 'ㄱㅊㅅ'). 한글이 아닌
+// 글자(숫자/영문 등)는 그대로 둬서 부분 텍스트 검색과도 자연스럽게 섞이게 한다.
+function getChosungString(str) {
+  if (!str) return '';
+  return [...str].map(ch => getChosung(ch) || ch).join('');
+}
+// 검색어가 초성(ㄱ,ㄴ,ㄷ...)으로만 이루어져 있으면 이름의 초성 문자열에 포함되는지로
+// 매칭하고, 그 외(일반 글자 포함)엔 이름에 그대로 포함되는지로 매칭한다.
+// 예: "ㄱㄷㅎ" -> "김대현"은 매칭, "김철수"는 매칭 안 됨 (초성 하나만 필터할 때보다 훨씬 좁혀짐)
+function matchesNameSearch(name, query) {
+  if (!name || !query) return true;
+  const q = query.trim();
+  if (!q) return true;
+  const isChosungQuery = [...q].every(ch => CHOSUNG_BASIC_LIST.includes(ch));
+  if (isChosungQuery) return getChosungString(name).includes(q);
+  return name.toLowerCase().includes(q.toLowerCase());
+}
 
 function openItemStructureSheet() {
   const sheet = document.getElementById('itemStructureSheet');
@@ -9006,6 +9023,7 @@ let ddAcctTab = 'normal'; // 일별 상세보기 계좌선택: 'normal'(일반�
 let txItemsAcctTab = 'normal'; // 통장이동/예금 세부항목 입력화면: 'normal' | 'deposit'
 let txItemsManageHidden = false; // 통장이동/예금 세부항목 입력화면: 계좌 숨김 관리 모드
 let txPickGroupChosungFilter = null; // 이름선택 화면: 초성 찾기 선택값(null=전체)
+let txPickGroupSearchQuery = ''; // 이름선택 화면: 검색창 입력값(이름 또는 초성)
 
 function renderTxStepPickGroup(sheet) {
   const cat = catById(State.formCategoryId);
@@ -9018,10 +9036,10 @@ function renderTxStepPickGroup(sheet) {
     const person = (State.persons || []).find(p => p.id === g.id);
     return !person || !person.hidden;
   });
-  // 초성 찾기 필터 적용
-  const groups = txPickGroupChosungFilter
-    ? groupsAll.filter(g => getChosung(g.name) === txPickGroupChosungFilter)
-    : groupsAll;
+  // 초성 찾기 필터 적용 (버튼 필터 + 검색창 텍스트/초성 필터를 함께 적용)
+  const groups = groupsAll
+    .filter(g => !txPickGroupChosungFilter || getChosung(g.name) === txPickGroupChosungFilter)
+    .filter(g => matchesNameSearch(g.name, txPickGroupSearchQuery));
   // subGroups(사람)가 있는 카테고리(예: 헌금)는 ungroupedItems 표시 안 함 — 공통 소분류이므로
   const ungroupedItems = groupsAll.length > 0 ? [] : State.subItems.filter(s => s.categoryId === State.formCategoryId && !s.subGroupId);
 
@@ -9058,6 +9076,7 @@ function renderTxStepPickGroup(sheet) {
       <div class="formrow">
         <label>이름 선택</label>
         ${groupsAll.length > 0 ? `
+        <input type="text" id="txPickGroupSearch" class="dateinput" placeholder="이름 또는 초성 검색 (예: ㄱㄷㅎ)" value="${escapeHTML(txPickGroupSearchQuery)}" style="margin-bottom:8px;">
         <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
           <button class="chosung-btn" data-chosung="" style="padding:5px 9px;border-radius:7px;font-size:12px;font-weight:700;border:1px solid var(--border);${!txPickGroupChosungFilter?'background:var(--primary);color:#fff;border-color:var(--primary);':'background:#fff;color:var(--text-2);'}">전체</button>
           ${CHOSUNG_BASIC_LIST.map(c => `
@@ -9078,7 +9097,7 @@ function renderTxStepPickGroup(sheet) {
               <span>${escapeHTML(s.name)}</span>
             </button>
           `).join('')}
-          ${groupsAll.length > 0 && groups.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12.5px;width:100%;">"${txPickGroupChosungFilter}"으로 시작하는 이름이 없어요</div>` : ''}
+          ${groupsAll.length > 0 && groups.length === 0 ? `<div style="padding:16px;text-align:center;color:var(--text-3);font-size:12.5px;width:100%;">${txPickGroupSearchQuery ? `"${escapeHTML(txPickGroupSearchQuery)}"에 해당하는 이름이 없어요` : `"${txPickGroupChosungFilter}"으로 시작하는 이름이 없어요`}</div>` : ''}
         </div>
       </div>
       <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
@@ -9106,6 +9125,20 @@ function renderTxStepPickGroup(sheet) {
       renderTxStepPickGroup(sheet);
     });
   });
+  const pickSearchInput = sheet.querySelector('#txPickGroupSearch');
+  if (pickSearchInput) {
+    // 매 입력마다 목록을 다시 그리므로, 포커스/커서 위치를 유지해 타이핑이 끊기지 않게 한다.
+    pickSearchInput.addEventListener('input', () => {
+      txPickGroupSearchQuery = pickSearchInput.value;
+      const caret = pickSearchInput.selectionStart;
+      renderTxStepPickGroup(sheet);
+      const refocused = sheet.querySelector('#txPickGroupSearch');
+      if (refocused) {
+        refocused.focus();
+        refocused.setSelectionRange(caret, caret);
+      }
+    });
+  }
   sheet.querySelectorAll('.pickgroup-hide-toggle').forEach(cb => {
     cb.addEventListener('change', async () => {
       const heongCat = State.categories.find(c => c.name === '헌금' && c.type === 'income');
@@ -9127,6 +9160,7 @@ function renderTxStepPickGroup(sheet) {
   sheet.querySelector('#txBack').addEventListener('click', () => {
     txPickGroupManageHidden = false;
     txPickGroupChosungFilter = null;
+    txPickGroupSearchQuery = '';
     State.formStep = 'pick';
     State.formCategoryId = null;
     renderTxSheet();
@@ -9134,6 +9168,7 @@ function renderTxStepPickGroup(sheet) {
   sheet.querySelector('#txClose').addEventListener('click', () => {
     txPickGroupManageHidden = false;
     txPickGroupChosungFilter = null;
+    txPickGroupSearchQuery = '';
     if (State.editingTx) {
       // 수정 모드에서 중분류 변경 중 취소 → items로 복귀
       State.formSubGroupId = State.editingTx.subGroupId || State.editingTx.personId || null;
