@@ -125,16 +125,16 @@ function applyLockState() {
    ========================================================= */
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyB2zT9Wi_uecCfjSU90Up8geerZOskPCbs",
-  authDomain: "juwon-church.firebaseapp.com",
-  databaseURL: "https://juwon-church-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "juwon-church",
-  storageBucket: "juwon-church.firebasestorage.app",
+  authDomain: "seongeun-church.firebaseapp.com",
+  databaseURL: "https://seongeun-church-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "seongeun-church",
+  storageBucket: "seongeun-church.firebasestorage.app",
   messagingSenderId: "410693392195",
   appId: "1:410693392195:web:f62c07dfdfe4bdfd73c1f6"
 };
 
 // Firebase REST API 방식 (SDK 불필요 - fetch만 사용)
-const FB_URL = 'https://juwon-church-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_URL = 'https://seongeun-church-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 // 모든 경로 앞에 churches/{CHURCH_ID}/ 를 붙여 교회별로 데이터를 분리한다.
 // 호출부(fbGet('churchData/...') 등)는 그대로 두고 여기서만 재작성하므로
