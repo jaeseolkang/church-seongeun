@@ -22,7 +22,7 @@ const USE_FIREBASE = true;
 // Firebase DB 안에서 churches/{CHURCH_ID}/ 경로 아래로 데이터가 분리됨.
 // (영문 소문자/숫자/하이픈만 사용 권장 — Firebase 경로에 안전한 문자)
 // ============================================================
-const CHURCH_ID = 'juwon-church';
+const CHURCH_ID = 'seongeun-church';
 
 
 
