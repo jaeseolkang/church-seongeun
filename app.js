@@ -1,13 +1,5 @@
 // v4.100 | 2026-09-08 KST | 수정: 멀티 교회(멀티테넌트) 지원 —
-// 하나의 Firebase 프로젝트를 여러 교회가 공유하되, 모든 읽기/쓰기 경로 앞에
-// churches/{CHURCH_ID}/ 를 자동으로 붙여 교회별 데이터를 완전히 분리함.
-// 기존 fbGet/fbSet/fbUpdate 호출부(churchData/... 등)는 그대로 두고
-// 세 함수 내부에서만 경로를 재작성하므로 나머지 코드 변경 없음.
-// 새 교회 저장소를 만들 때는 CHURCH_ID 한 줄만 바꾸면 됨 | cache:v4100
-// v4.101 | 2026-09-08 KST | 수정: IndexedDB/localStorage 오리진 공유 버그 수정 —
-// IndexedDB(DB_NAME)와 localStorage(관리자 로그인 상태)가 오리진 단위로 저장되어
-// 같은 도메인(jaeseolkang.github.io)의 다른 교회 사이트와 로컬 데이터·로그인
-// 상태가 섞이던 문제를 CHURCH_ID를 키에 포함시켜 해결함.
+
 'use strict';
 const APP_VERSION = 'v4.101 (cache v4101)';
 
@@ -22,7 +14,20 @@ const USE_FIREBASE = true;
 // Firebase DB 안에서 churches/{CHURCH_ID}/ 경로 아래로 데이터가 분리됨.
 // (영문 소문자/숫자/하이픈만 사용 권장 — Firebase 경로에 안전한 문자)
 // ============================================================
+
+
+// ============================================================
 const CHURCH_ID = 'seongeun-church';
+const CHURCH_DISPLAY_NAME = '성은교회';
+// ============================================================
+
+
+(function applyChurchDisplayName() {
+  const title = `${CHURCH_DISPLAY_NAME} 회계부`;
+  document.title = title;
+  const appleTitleMeta = document.querySelector('meta[name="apple-mobile-web-app-title"]');
+  if (appleTitleMeta) appleTitleMeta.setAttribute('content', title);
+})();
 
 
 
@@ -125,16 +130,16 @@ function applyLockState() {
    ========================================================= */
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyB2zT9Wi_uecCfjSU90Up8geerZOskPCbs",
-  authDomain: "seongeun-church.firebaseapp.com",
-  databaseURL: "https://seongeun-church-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "seongeun-church",
-  storageBucket: "seongeun-church.firebasestorage.app",
+  authDomain: "juwon-church.firebaseapp.com",
+  databaseURL: "https://juwon-church-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "juwon-church",
+  storageBucket: "juwon-church.firebasestorage.app",
   messagingSenderId: "410693392195",
   appId: "1:410693392195:web:f62c07dfdfe4bdfd73c1f6"
 };
 
 // Firebase REST API 방식 (SDK 불필요 - fetch만 사용)
-const FB_URL = 'https://seongeun-church-default-rtdb.asia-southeast1.firebasedatabase.app';
+const FB_URL = 'https://juwon-church-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 // 모든 경로 앞에 churches/{CHURCH_ID}/ 를 붙여 교회별로 데이터를 분리한다.
 // 호출부(fbGet('churchData/...') 등)는 그대로 두고 여기서만 재작성하므로
@@ -954,12 +959,89 @@ function openAppTitleSheet(current, onSave) {
   });
 }
 
+// 기부금영수증에 표시할 교회 정보 입력 시트
+function openChurchInfoSheet(current, onSave) {
+  let sheet = document.getElementById('churchInfoSheet');
+  if (!sheet) {
+    sheet = document.createElement('div');
+    sheet.id = 'churchInfoSheet';
+    sheet.className = 'sheet';
+    document.getElementById('app').appendChild(sheet);
+  }
+  sheet.innerHTML = `
+    <div class="sheet-handle"></div>
+    <div class="sheet-head">
+      <h3>교회 정보</h3>
+      <button id="ciClose" class="sheet-close-btn">${ICONS.close}닫기</button>
+    </div>
+    <div class="sheet-body">
+      <div class="settings-sub" style="padding:0 2px 12px;">기부금 영수증에 표시되는 정보예요.</div>
+      <div class="formrow">
+        <label>교회명</label>
+        <input type="text" id="ciName" class="dateinput" value="${escapeHTML(current.name)}" placeholder="예: 주원교회">
+      </div>
+      <div class="formrow">
+        <label>담임목사 이름</label>
+        <input type="text" id="ciPastor" class="dateinput" value="${escapeHTML(current.pastorName)}" placeholder="예: 이현재">
+      </div>
+      <div class="formrow">
+        <label>소속교단 (선택)</label>
+        <input type="text" id="ciDenom" class="dateinput" value="${escapeHTML(current.denomination)}" placeholder="예: 대한예수교장로회">
+      </div>
+      <div class="formrow">
+        <label>사업자등록번호</label>
+        <input type="text" id="ciBizNo" class="dateinput" value="${escapeHTML(current.bizNo)}" placeholder="예: 144-89-00213">
+      </div>
+      <div class="formrow">
+        <label>주소</label>
+        <input type="text" id="ciAddr" class="dateinput" value="${escapeHTML(current.addr)}" placeholder="교회 주소">
+      </div>
+      <button class="btn-primary" id="ciSave">저장</button>
+    </div>
+  `;
+  openSheet('churchInfoSheet');
+  setTimeout(() => sheet.querySelector('#ciName').focus(), 300);
+
+  sheet.querySelector('#ciClose').addEventListener('click', closeAllSheets);
+  sheet.querySelector('#ciSave').addEventListener('click', async () => {
+    const value = {
+      name: sheet.querySelector('#ciName').value.trim(),
+      pastorName: sheet.querySelector('#ciPastor').value.trim(),
+      denomination: sheet.querySelector('#ciDenom').value.trim(),
+      bizNo: sheet.querySelector('#ciBizNo').value.trim(),
+      addr: sheet.querySelector('#ciAddr').value.trim(),
+    };
+    await setChurchInfo(value);
+    closeAllSheets();
+    showToast('교회 정보가 저장됐어요');
+    onSave(value);
+  });
+}
+
 async function getAppTitle() {
   const rec = await DB.get('settings', 'appTitle');
   return rec ? rec.value : '';
 }
 async function setAppTitle(value) {
   await DB.put('settings', { key: 'appTitle', value });
+}
+
+// 기부금영수증에 들어갈 교회 정보 (교회명/목회자 이름/사업자등록번호/주소/소속교단).
+// 저장소(교회)마다 설정 화면에서 직접 입력해두면, 코드를 손대지 않아도
+// 영수증 발행 시 해당 교회 정보가 자동으로 반영된다.
+async function getChurchInfo() {
+  const rec = await DB.get('settings', 'churchInfo');
+  return Object.assign({ name: CHURCH_DISPLAY_NAME || '', pastorName: '', bizNo: '', addr: '', denomination: '' }, rec ? rec.value : {});
+}
+async function setChurchInfo(value) {
+  await DB.put('settings', { key: 'churchInfo', value });
+}
+// 설정에 저장된 값으로 기부금영수증용 CHURCH 객체(name/bizNo/addr/receiverLine)를 조립
+async function buildReceiptChurchObject() {
+  const info = await getChurchInfo();
+  const name = info.pastorName ? `${info.name}(${info.pastorName})` : (info.name || '');
+  const receiverLine = info.denomination ? `${info.denomination}    ${info.name}` : (info.name || '');
+  return { name, bizNo: info.bizNo || '', addr: info.addr || '', receiverLine };
 }
 
 async function getYearCarryover(year) {
@@ -6301,7 +6383,14 @@ function renderSettings() {
 
 
     <div class="settings-group">
-      <div class="settings-group-title">교회 직인</div>
+      <div class="settings-group-title">기부금영수증 설정</div>
+      <div class="settings-row" id="rowChurchInfo" style="cursor:pointer;">
+        <div>
+          <div class="settings-label">교회 정보</div>
+          <div class="settings-sub" id="churchInfoPreview">불러오는 중...</div>
+        </div>
+        ${ICONS.chevR}
+      </div>
       <div class="settings-row" style="align-items:center;">
         <div style="display:flex;align-items:center;gap:12px;min-width:0;">
           <div id="sealPreviewWrap" style="width:52px;height:52px;border-radius:12px;background:var(--surface-2);display:flex;align-items:center;justify-content:center;overflow:hidden;flex-shrink:0;border:1px solid var(--border);">
@@ -6320,6 +6409,7 @@ function renderSettings() {
       <div class="settings-sub" style="padding:0 16px 12px;">기부금 영수증 등 문서 출력 시 사용할 직인 이미지예요. 배경이 투명한 PNG를 권장해요.</div>
       <input type="file" id="sealFileInput" accept="image/png,image/jpeg" style="display:none;">
     </div>
+
 
     <div class="settings-group">
       <div class="settings-group-title">데이터</div>
@@ -6388,6 +6478,19 @@ function renderSettings() {
   getAppTitle().then(t => {
     const el = page.querySelector('#appTitlePreview');
     if (el) el.textContent = t || '교회 회계부';
+  });
+  // 교회 정보(기부금영수증용) 미리보기 로드
+  getChurchInfo().then(info => {
+    const el = page.querySelector('#churchInfoPreview');
+    if (!el) return;
+    el.textContent = info.name ? `${info.name}${info.pastorName ? '('+info.pastorName+')' : ''}` : '입력 필요';
+  });
+  page.querySelector('#rowChurchInfo').addEventListener('click', async () => {
+    const current = await getChurchInfo();
+    openChurchInfoSheet(current, (saved) => {
+      const el = page.querySelector('#churchInfoPreview');
+      if (el) el.textContent = saved.name ? `${saved.name}${saved.pastorName ? '('+saved.pastorName+')' : ''}` : '입력 필요';
+    });
   });
 
   page.querySelector('#rowAppTitle').addEventListener('click', async () => {
@@ -6780,6 +6883,7 @@ function renderDonationReceiptHTML() {
           <div id="donTotalAmt" style="font-size:24px;font-weight:800;margin-top:2px;">0원</div>
         </div>
         <div id="donSealWarn" style="display:none;font-size:12px;color:var(--expense);margin-top:10px;">🔖 등록된 직인이 없어요. <a href="#" id="donGoSeal" style="color:var(--primary);font-weight:700;">설정에서 등록하기</a></div>
+        <div id="donChurchInfoWarn" style="display:none;font-size:12px;color:var(--expense);margin-top:6px;">🏠 교회 정보(사업자등록번호 등)가 입력되지 않았어요. <a href="#" id="donGoChurchInfo" style="color:var(--primary);font-weight:700;">설정에서 입력하기</a></div>
         <button id="donIssueBtn" class="btn-primary" disabled style="margin-top:14px;">발행</button>
       </div>
 
@@ -6996,7 +7100,10 @@ async function initDonationReceiptView(page) {
   let donors = donationTotalsForYear(State.donationYear || (new Date().getFullYear() - 1));
   const sealRec = await DB.get('settings', 'churchSeal');
   const sealDataUrl = sealRec && sealRec.dataUrl ? sealRec.dataUrl : null;
-  const CHURCH = { name: '주원교회(이현재)', bizNo: '144-89-00213', addr: '경기도 성남시 분당구 운중동 959 판오션타워 702호', receiverLine: '대한예수교장로회    주원교회' };
+  // 설정 화면에 입력해둔 교회 정보(교회명/목회자/사업자등록번호/주소/소속교단)로 조립.
+  // 아직 아무것도 입력 안 했다면 이름만 CHURCH_DISPLAY_NAME으로 채워지고 나머지는 빈 값.
+  const churchInfoRaw = await getChurchInfo();
+  const CHURCH = await buildReceiptChurchObject();
 
   const yearInput = page.querySelector('#donYear');
   const dateInput = page.querySelector('#donIssueDate');
@@ -7005,6 +7112,8 @@ async function initDonationReceiptView(page) {
 
   if (!sealDataUrl) page.querySelector('#donSealWarn').style.display = 'block';
   page.querySelector('#donGoSeal')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('settings'); });
+  if (!churchInfoRaw.bizNo || !churchInfoRaw.addr) page.querySelector('#donChurchInfoWarn').style.display = 'block';
+  page.querySelector('#donGoChurchInfo')?.addEventListener('click', (e) => { e.preventDefault(); switchTab('settings'); });
 
   const fmt = (n) => fmtMoney(n);
   const byKey = (k) => donors.find(d => d.key === k);
